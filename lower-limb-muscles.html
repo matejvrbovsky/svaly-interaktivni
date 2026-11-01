@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Svaly dolní končetiny – interaktivní model</title>
+<style>
+:root{--ink:#1e293b;--mute:#64748b;--c:#94a3b8;--abd:0deg}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);font:16px/1.45 "Trebuchet MS","Segoe UI",system-ui,sans-serif;background:linear-gradient(135deg,#e0e7ff,#fce7f3 55%,#cffafe)}
+header{max-width:1300px;margin:auto;padding:16px 24px 0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:clamp(20px,3vw,32px)}
+.tabs{display:flex;gap:4px;padding:5px;background:#fff;border-radius:999px;box-shadow:0 3px 12px #1e293b22}
+.tabs button{border:0;background:none;padding:10px 24px;border-radius:999px;font:inherit;font-weight:700;color:var(--mute);cursor:pointer;touch-action:manipulation}
+.tabs button[aria-selected=true]{color:#fff;background:linear-gradient(135deg,#6366f1,#ec4899)}
+main{max-width:1300px;margin:auto;padding:16px 24px 24px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,1fr);gap:20px}
+.card{background:#fff;border-radius:24px;box-shadow:0 10px 32px #1e293b1c;padding:18px}
+.hint{margin:0 0 4px;text-align:center;font-weight:700;color:var(--mute)}
+.views{display:grid;grid-template-columns:minmax(0,1fr) clamp(88px,22%,170px);grid-template-rows:max-content max-content 1fr;gap:10px;align-items:start}
+.vw{margin:0;min-width:0}
+svg.view{display:block;width:100%;height:auto;touch-action:manipulation}
+.vw.main{grid-column:1;grid-row:1/4}
+.vw.main svg{max-height:70vh}
+.vw.thumb{grid-column:2;cursor:pointer;padding:4px;border-radius:16px;background:#f8fafc;transition:box-shadow .2s}
+.vw.thumb:hover{box-shadow:0 0 0 3px #818cf8}
+.vw.thumb .lbls{display:none}
+.vw.thumb .m{pointer-events:none}
+figcaption{text-align:center;font-weight:700;font-size:14px;color:var(--mute)}
+.vw.main figcaption{display:none}
+.nt *{transition:none!important}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:center;margin-top:8px;font-size:14px;font-weight:600}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:5px;margin-right:6px;vertical-align:-2px}
+
+/* ---- SVG parts ---- */
+.skin{fill:#fbe3d3;stroke:#e6bda3;stroke-width:2}
+.bone{fill:#fff9;stroke:#e6bda3;stroke-width:2;pointer-events:none}
+.m{cursor:pointer;outline:none;stroke:#fff;stroke-width:1.6;stroke-linejoin:round;fill-opacity:.85;
+   transform-box:fill-box;transform-origin:50% 50%;
+   transition:transform .8s cubic-bezier(.34,1.3,.5,1),fill-opacity .4s,filter .4s}
+.m:not(.on):hover{filter:brightness(1.15);stroke-width:3}
+.m:focus-visible{stroke:#1e293b;stroke-width:3.5}
+body.sel .m:not(.on){fill-opacity:.3}
+.m.on{fill-opacity:1;filter:saturate(1.5) drop-shadow(0 0 8px var(--c));transform:scale(var(--sx),var(--sy))}
+.leg{transform:rotate(var(--abd));transform-origin:120px 56px;transition:transform .8s cubic-bezier(.4,0,.2,1)}
+.lbl{font:700 14px "Trebuchet MS",system-ui,sans-serif;fill:#334155;cursor:pointer}
+.lbl:hover,.lbl.on{fill:#000;text-decoration:underline}
+
+/* ---- info panel ---- */
+#panel{align-self:start}
+.ph{display:none;margin:0 0 8px;font-size:20px;font-weight:700;text-align:center}
+.empty .ph{display:block}
+.empty .det{display:none}
+.chip{display:inline-block;padding:4px 14px;border-radius:999px;color:#fff;font-weight:700;font-size:14px;background:var(--c)}
+h2{margin:8px 0 0;font-size:clamp(26px,3.4vw,36px);line-height:1.1}
+.lat{margin:2px 0 10px;font-style:italic;color:var(--mute);font-size:18px}
+#fn{font-size:18px;margin:0}
+dl{margin:8px 0 0}
+dt{margin-top:12px;font-weight:700;color:var(--mute)}
+dd{margin:3px 0 0;padding:10px 14px;font-size:18px;background:#f1f5f9;border-radius:14px;border-left:6px solid var(--c)}
+.note{margin:8px 0 0;font-size:13px;color:var(--mute)}
+
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+.skin{fill:#fbe3d3;stroke:none;filter:drop-shadow(0 0 1.3px #b9825f)}
+.dec{fill:#f0b99b;stroke:#fff;stroke-width:1.2;pointer-events:none}
+.tend{fill:#f7e3d6;stroke:#e9c9b4;stroke-width:1;pointer-events:none}
+.fib{pointer-events:none!important;filter:none!important;fill-opacity:1!important}
+.lbl{font-style:italic}
+.mt{margin:8px 0 0;font-weight:700;color:var(--c)}
+#r0,#r1,#r2{transition:transform .8s cubic-bezier(.4,0,.2,1)}
+#r0,#l0{transform-origin:118px 64px}#r1,#l1{transform-origin:118px 304px}#r2{transform-origin:126px 544px}
+#l0,#l1{transition:transform .8s cubic-bezier(.4,0,.2,1)}
+/* štítky přímo na svalech (bez čar) */
+.ml{font:700 12.5px "Trebuchet MS",system-ui,sans-serif;fill:#1e293b;paint-order:stroke;stroke:#fff;stroke-width:3.4;stroke-linejoin:round;pointer-events:none}
+.ml .s{font-weight:400;font-style:italic;font-size:10.5px}
+.vw.thumb .ml{display:none}
+@media(max-width:820px){
+ header{padding:10px 12px 0}h1{font-size:18px}
+ .tabs button{padding:8px 14px}
+ main{grid-template-columns:1fr;padding:8px 10px 14px;gap:10px}
+ .card{padding:10px;border-radius:18px}
+ .hint{font-size:13px;margin:0 0 4px}
+ .views{grid-template-columns:minmax(0,1fr) 80px;gap:8px}
+ .vw.main{grid-row:1/4}
+ .vw.main svg{max-height:54vh}
+ .vw.thumb{padding:3px}
+ figcaption{font-size:12px}
+ .legend{font-size:12px;gap:4px 10px;margin-top:6px}
+ .ph{font-size:16px}h2{font-size:24px}#fn,dd{font-size:16px}.note{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Svaly dolní končetiny</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-v="front">Zepředu</button>
+    <button role="tab" data-v="back">Zezadu</button>
+    <button role="tab" data-v="side">Z boku</button>
+  </div>
+</header>
+
+<main>
+  <section class="card stage">
+    <p class="hint">Klepni na sval. Malý obrázek přepne pohled.</p>
+
+    <!-- Sdílené definice: kůže (zepředu/zezadu) a textura svalových vláken -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="gr">
+      <pattern id="fib" width="5" height="8" patternUnits="userSpaceOnUse"><path d="M1 0V8M3.8 0V8" stroke="#fff" stroke-opacity=".28" stroke-width="1"/></pattern>
+      <path id="skinFB" d="M50 22C40 50 38 90 46 140C54 200 70 250 78 290C84 310 80 330 86 370C92 430 98 480 104 534L96 568C92 584 100 594 128 594C152 594 162 588 156 574L146 534C150 480 170 420 168 372C166 330 160 312 158 290C158 250 172 190 188 130C196 90 196 50 190 22Q120 4 50 22Z"/>
+    </defs></svg>
+
+    <!-- ZEPŘEDU: pravá noha (zevní strana = vlevo na obrazovce) -->
+    <div class="views">
+    <figure class="vw main" id="w-front" data-v="front"><svg class="view" id="v-front" viewBox="70 0 350 610" role="group" aria-label="Pravá noha zepředu">
+      <g transform="translate(90 0)"><g class="leg">
+        <use href="#skinFB" class="skin"/>
+        <path data-m="vl"   data-side="l" d="M58 96C74 84 98 104 102 150C106 210 104 262 98 298C86 304 80 292 76 270C68 230 52 170 50 130C50 112 54 102 58 96Z"/>
+        <path class="dec" d="M150 210C162 214 166 250 162 280C158 300 140 306 126 298C122 270 130 230 150 210Z"/>
+        <path data-m="rf"   data-side="l" d="M104 70C122 62 142 76 140 112C140 170 134 240 128 296C116 302 108 292 106 262C102 200 96 130 104 70Z"/>
+        <path data-m="adl"  data-side="r" d="M146 80C162 84 176 100 174 130C170 160 160 196 150 226C140 200 136 140 140 100C140 90 142 84 146 80Z"/>
+        <path data-lp="r" data-m="ilio" data-side="r" d="M122 30C140 40 160 66 168 106C152 108 132 82 122 30Z"/>
+        <path data-a="-108" data-l="1" data-c="86 92" data-m="sar"  data-side="r" d="M58 40L74 32C102 106 134 188 158 262C164 280 164 296 158 306L146 302C144 284 138 264 130 244C108 190 76 118 58 40Z"/>
+        <path data-l="1" data-m="ta"   data-side="l" d="M92 330C104 322 114 336 114 364C114 430 112 490 108 530C100 532 96 498 94 450C92 404 88 354 92 330Z"/>
+        <circle class="bone" cx="120" cy="306" r="14"/>
+      </g></g>
+      <g class="lbls"></g>
+    </svg><figcaption>Zepředu</figcaption></figure>
+
+    <!-- ZEZADU: kresleno jako zepředu (zevní strana vlevo), pak zrcadleno -->
+    <figure class="vw thumb" id="w-back" data-v="back"><svg class="view" id="v-back" viewBox="70 0 350 610" role="group" aria-label="Pravá noha zezadu">
+      <g data-mir="1" transform="translate(420 0) scale(-1 1)"><g transform="translate(90 0)"><g class="leg">
+        <use href="#skinFB" class="skin"/>
+        <path data-l="1" data-m="so"   data-side="l" d="M92 402C104 446 150 446 164 402C168 452 148 504 126 540C106 504 86 456 92 402Z"/>
+        <path class="tend" d="M121 470H133L135 540H119Z"/>
+        <path class="dec" d="M152 180C168 176 180 190 176 220C172 250 160 280 152 296C148 270 150 220 152 180Z"/>
+        <path data-m="gmax" data-side="l" d="M52 60C80 70 120 60 140 38C176 44 188 80 178 118C170 148 130 164 96 152C62 140 46 100 52 60Z"/>
+        <path data-m="gmed" data-side="r" d="M48 30C80 20 120 24 140 40C124 60 88 70 54 62C44 54 42 40 48 30Z"/>
+        <path data-m="bf"   data-side="r" d="M66 160C86 150 104 168 106 196C108 240 106 276 100 306C88 312 78 302 76 280C70 240 54 190 66 160Z"/>
+        <path data-m="st"   data-side="l" d="M112 170C130 160 152 176 152 200C152 240 148 276 142 300C130 306 120 298 118 278C114 240 106 200 112 170Z"/>
+        <path data-m="gc"   data-side="r" d="M88 324C102 310 142 310 158 324C168 360 160 408 130 452C104 418 84 366 88 324Z"/>
+      </g></g></g>
+      <g class="lbls"></g>
+    </svg><figcaption>Zezadu</figcaption></figure>
+
+    <!-- Z BOKU: noha se skutečně hýbe. Skupiny r0 (kyčel) ⊃ r1 (koleno) ⊃ r2 (kotník) se otáčejí kolem kloubů -->
+    <figure class="vw thumb" id="w-side" data-v="side"><svg class="view" id="v-side" viewBox="70 0 350 610" role="group" aria-label="Pravá noha z boku">
+      <g transform="translate(90 0)">
+        <path class="skin" d="M44 24C100 6 160 8 190 24L186 122L60 154C34 122 30 60 44 24Z"/>
+        <g id="r0">
+          <path class="skin" d="M40 56C38 150 62 240 86 298Q120 324 158 298C168 240 188 150 190 56Z"/>
+          <path data-m="vl" data-side="r" d="M96 100C124 92 144 120 142 170C142 230 146 270 148 300C130 308 108 300 96 260C84 220 82 150 96 100Z"/>
+          <path data-m="rf" data-side="r" d="M150 78C168 90 174 140 170 190C168 240 160 280 150 302C140 296 138 250 138 200C138 150 140 100 150 78Z"/>
+          <path data-m="bf" data-side="l" d="M62 100C84 90 104 112 106 156C108 214 106 266 102 316C90 322 80 312 76 292C66 240 50 160 62 100Z"/>
+          <circle class="bone" cx="152" cy="304" r="12"/>
+          <g id="r1">
+            <path class="skin" d="M82 292C70 340 70 400 92 450C100 480 104 520 106 548L148 548C150 500 150 440 156 380C158 340 160 316 158 292Q120 316 82 292Z"/>
+            <path data-l="1" data-c="114 478" data-m="so" data-side="l" d="M98 360C110 350 126 360 128 390C130 440 126 490 116 520C110 528 106 520 104 500C98 460 90 420 94 390Z"/>
+            <path data-m="gc" data-side="l" d="M90 304C78 336 74 384 86 424C94 446 104 464 110 488C120 478 124 420 122 372C120 332 112 308 90 304Z"/>
+            <path class="tend" d="M108 484C112 484 116 492 116 520L114 548L106 548L104 520C104 498 106 488 108 484Z"/>
+            <path data-l="1" data-m="ta" data-side="r" d="M138 330C150 332 154 360 152 400C150 450 146 500 142 540C134 538 132 490 130 440C128 390 128 346 138 330Z"/>
+            <g id="r2"><path class="skin" d="M100 538L150 538L156 554C190 562 226 572 238 590C242 600 228 604 214 604L98 604C90 590 94 560 100 538Z"/></g>
+          </g>
+        </g>
+        <path data-m="gmed" data-side="r" d="M70 22C102 12 150 20 172 48C160 80 120 98 84 90C60 80 54 48 70 22Z"/>
+        <path data-m="gmax" data-side="l" d="M38 40C28 90 44 140 92 156C128 160 152 130 150 90C148 56 120 34 88 30C62 28 44 30 38 40Z"/>
+      </g>
+      <g class="lbls"></g>
+    </svg><figcaption>Z boku</figcaption></figure>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <aside class="card empty" id="panel" aria-live="polite">
+    <p class="ph">👆 Klepni na sval</p>
+    <div class="det">
+      <span class="chip" id="chip"></span>
+      <h2 id="nm"></h2>
+      <p class="lat" id="lat"></p>
+      <p id="fn"></p>
+      <p id="mt" class="mt"></p>
+      <dl>
+        <dt>Začátek (origo)</dt><dd id="or"></dd>
+        <dt>Úpon (insertio)</dt><dd id="in"></dd>
+      </dl>
+      <p class="note">Origo je pevnější začátek svalu, úpon je na kosti, kterou sval pohybuje.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ===== DATA – tady se upravuje =====
+   G: skupiny svalů -> [název, barva, (volitelně) zvětšení X a Y při stahu]
+   M: svaly -> g skupina, n česky, s latinsky (štítek), l celý latinský název, f funkce, o origo, i insertio,
+               m popis pohybu, p póza (h kyčel°, k koleno°, a kotník°, abd = výkyv celé nohy do strany°)
+   Úhly: kyčel − = flexe (stehno dopředu), + = extenze; koleno + = flexe; kotník − = dorzální flexe, + = plantární flexe.
+   Klidová póza: koleno mírně pokrčené (20°), aby šla vidět extenze. */
+const G={
+  glute:['Hýžďové svaly','#ef4444',1.08,.9],
+  flex:['Ohýbače kyčle','#14b8a6'],
+  quad:['Čtyřhlavý sval','#f59e0b'],
+  add:['Přitahovače','#ec4899'],
+  ham:['Zadní skupina','#8b5cf6'],
+  calf:['Lýtkové svaly','#3b82f6'],
+  shin:['Svaly holeně','#10b981']
+};
+const REST={h:0,k:20,a:0,abd:0};
+const M={
+  gmax:{g:'glute',n:'Velký sval hýžďový',s:'gluteus maximus',c:'Velký hýžďový',l:'Musculus gluteus maximus',
+    f:'Nejsilnější natahovač kyčle: táhne stehno dozadu při vstávání, chůzi do schodů a sprintu.',
+    o:'Zadní plocha lopaty kyčelní, kost křížová a kostrč',i:'Drsnatina kosti stehenní (tuberositas glutea) a tractus iliotibialis',
+    m:'extenze v kyčli – stehno jde dozadu',p:{h:28}},
+  gmed:{g:'glute',n:'Střední sval hýžďový',s:'gluteus medius',c:'Střední hýžďový',l:'Musculus gluteus medius',
+    f:'Upažuje (unožuje) stehno a při stoji na jedné noze drží pánev vodorovně.',
+    o:'Zevní plocha lopaty kyčelní',i:'Velký chocholík (trochanter major) kosti stehenní',
+    m:'abdukce v kyčli – noha jde do strany (viz pohled zepředu nebo zezadu)',p:{abd:18}},
+  ilio:{g:'flex',n:'Bedrokyčlostehenní sval',s:'iliopsoas',c:'Bedrokyčlostehenní',l:'Musculus iliopsoas',
+    f:'Nejsilnější ohýbač kyčle: zvedá stehno dopředu při chůzi, běhu a kopu.',
+    o:'Jáma kyčelní (m. iliacus) a bederní obratle Th12–L5 (m. psoas major)',i:'Malý chocholík (trochanter minor) kosti stehenní',
+    m:'flexe v kyčli – stehno jde dopředu',p:{h:-35}},
+  rf:{g:'quad',n:'Přímý sval stehenní',s:'rectus femoris',c:'Přímý stehenní',l:'Musculus rectus femoris',
+    f:'Součást čtyřhlavého svalu stehenního. Natahuje koleno a jako jediná hlava přes kyčel také ohýbá kyčel.',
+    o:'Dolní přední trn kyčelní (spina iliaca anterior inferior)',i:'Hrbolatina holenní (tuberositas tibiae) přes čéšku a vaz čéšky',
+    m:'extenze v koleni a flexe v kyčli',p:{h:-25,k:-3}},
+  vl:{g:'quad',n:'Zevní sval stehenní',s:'vastus lateralis',c:'Zevní stehenní',l:'Musculus vastus lateralis',
+    f:'Největší hlava čtyřhlavého svalu stehenního. Natahuje koleno (kop, výskok, vstávání).',
+    o:'Velký chocholík a linea aspera kosti stehenní',i:'Hrbolatina holenní přes čéšku a vaz čéšky',
+    m:'extenze v koleni – bérec jde dopředu',p:{k:-3}},
+  sar:{g:'flex',n:'Sval krejčovský',s:'sartorius',c:'Krejčovský',l:'Musculus sartorius',
+    f:'Nejdelší sval těla. Ohýbá a unožuje kyčel, ohýbá koleno (sed „po turecku“).',
+    o:'Horní přední trn kyčelní (spina iliaca anterior superior)',i:'Horní vnitřní plocha kosti holenní (pes anserinus)',
+    m:'flexe v kyčli a v koleni s mírnou abdukcí',p:{h:-30,k:65,abd:8}},
+  adl:{g:'add',n:'Dlouhý přitahovač',s:'adductor longus',c:'Dlouhý přitahovač',l:'Musculus adductor longus',
+    f:'Přitahuje stehno ke střední čáře těla (addukce) a pomáhá ohýbat kyčel.',
+    o:'Přední plocha stydké kosti (os pubis)',i:'Střední třetina linea aspera kosti stehenní',
+    m:'addukce v kyčli – noha jde ke střední čáře (viz pohled zepředu nebo zezadu)',p:{abd:-12,h:-8}},
+  bf:{g:'ham',n:'Dvojhlavý sval stehenní',s:'biceps femoris',c:'Dvojhlavý stehenní',l:'Musculus biceps femoris',
+    f:'Zevní sval zadní skupiny. Ohýbá koleno a natahuje kyčel, důležitý při běhu.',
+    o:'Caput longum: hrbol sedací kosti; caput breve: linea aspera kosti stehenní',i:'Hlavička kosti lýtkové (caput fibulae)',
+    m:'flexe v koleni – pata jde k hýždi',p:{k:85,h:10}},
+  st:{g:'ham',n:'Sval pološlachovitý',s:'semitendinosus',c:'Pološlachovitý',l:'Musculus semitendinosus',
+    f:'Vnitřní sval zadní skupiny. Ohýbá koleno, natahuje kyčel a otáčí pokrčený bérec dovnitř.',
+    o:'Hrbol sedací kosti (tuber ischiadicum)',i:'Horní vnitřní plocha kosti holenní (pes anserinus)',
+    m:'flexe v koleni – pata jde k hýždi',p:{k:80,h:10}},
+  ta:{g:'shin',n:'Přední sval holenní',s:'tibialis anterior',c:'Přední holenní',l:'Musculus tibialis anterior',
+    f:'Zdvihá přední část chodidla (dorzální flexe), takže při chůzi špička nezakopává.',
+    o:'Zevní kondyl a horní zevní plocha kosti holenní',i:'Os cuneiforme mediale a báze 1. kosti nártní',
+    m:'dorzální flexe – špička jde nahoru',p:{a:-22}},
+  gc:{g:'calf',n:'Lýtkový sval (dvojhlavý)',s:'gastrocnemius',c:'Lýtkový',l:'Musculus gastrocnemius',
+    f:'Hlavní sval lýtka. Ohýbá chodidlo plantárně (výpon, odraz) a pomáhá ohýbat koleno.',
+    o:'Kondyly kosti stehenní nad kolenem',i:'Patní kost (calcaneus) přes Achillovu šlachu',
+    m:'plantární flexe – pata se zvedá, špička jde dolů',p:{a:45,k:35}},
+  so:{g:'calf',n:'Sval zákalový',s:'soleus',c:'Zákalový',l:'Musculus soleus',
+    f:'Hluboký sval lýtka. Ohýbá chodidlo plantárně a při stoji neustále drží tělo vzpřímené.',
+    o:'Hlavička a horní část kosti lýtkové, zadní plocha kosti holenní',i:'Patní kost (calcaneus) přes Achillovu šlachu',
+    m:'plantární flexe – pata se zvedá, špička jde dolů',p:{a:45}}
+};
+
+/* ===== helpers ===== */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+let view='front', cur=null;
+
+/* ===== setup: gradients, legend, muscle styling ===== */
+$('#gr').insertAdjacentHTML('beforeend',Object.entries(G).map(([k,[,c]])=>
+  `<linearGradient id="g-${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,${c} 55%,#fff)"/><stop offset="1" style="stop-color:${c}"/></linearGradient>`).join(''));
+$('#legend').innerHTML=Object.values(G).map(([n,c])=>`<span><i style="background:${c}"></i>${n}</span>`).join('');
+$$('path[data-m]').forEach(e=>{
+  const m=M[e.dataset.m],g=G[m.g];
+  e.classList.add('m');
+  e.style.fill=`url(#g-${m.g})`;
+  e.style.setProperty('--c',g[1]);
+  e.style.setProperty('--sx',g[2]||1.22);   /* contraction: wider … */
+  e.style.setProperty('--sy',g[3]||.86);    /* … and shorter */
+  e.setAttribute('tabindex',0); e.setAttribute('role','button'); e.setAttribute('aria-label',m.n);
+});
+
+/* textura svalových vláken: průhledná kopie každého svalu se vzorem */
+$$('path.m').forEach(e=>{const c=e.cloneNode();c.classList.add('fib');['tabindex','role','aria-label'].forEach(t=>c.removeAttribute(t));c.style.fill='url(#fib)';e.after(c)});
+
+/* ===== select a muscle (or null = back to rest) ===== */
+function pick(k){
+  cur=k; const m=M[k];
+  $$('[data-m]').forEach(e=>e.classList.toggle('on',e.dataset.m===k));
+  document.body.classList.toggle('sel',!!m);
+  const q={...REST,...(m?m.p:{})};                     // target pose
+  const ft=q.a-.6*(q.h+q.k);                           // chodidlo částečně sleduje bérec
+  $$('#r0,#l0').forEach(e=>e.style.transform=`rotate(${q.h}deg)`);   // kyčel
+  $$('#r1,#l1').forEach(e=>e.style.transform=`rotate(${q.k}deg)`);   // koleno
+  $$('#r2').forEach(e=>e.style.transform=`rotate(${ft}deg)`);        // kotník
+  document.documentElement.style.setProperty('--abd',q.abd+'deg'); // leg swing in Front/Back view
+  $('#panel').classList.toggle('empty',!m);
+  $('#mt').textContent=m?'Pohyb: '+m.m:'';
+  if(m){
+    document.documentElement.style.setProperty('--c',G[m.g][1]);
+    $('#chip').textContent=G[m.g][0];
+    $('#nm').textContent=m.n; $('#lat').textContent=m.l; $('#fn').textContent=m.f;
+    $('#or').textContent=m.o; $('#in').textContent=m.i;
+  }
+}
+
+/* ===== štítky: přímo na svalech, česky (tučně) a latinsky (kurzívou), bez čar =====
+   Poloha je zadaná ručně pro každý pohled, aby se štítky nepřekrývaly:
+   LBL[pohled][sval] = [x, y, úhel, příznak]   (souřadnice jako u tvaru svalu)
+   příznak: 1 = jen česky (úzký sval), 'out' = štítek vedle svalu, zarovnaný doleva */
+const LBL={
+  front:{vl:[78,198,-90],rf:[122,170,-90],sar:[82,98,-109],adl:[160,170,-90],ilio:[174,62,0,'out'],ta:[101,432,-90]},
+  back:{gmax:[112,114,0],gmed:[94,43,0],st:[132,236,-90],bf:[80,236,-90],gc:[126,370,0],so:[106,486,-90]},
+  side:{gmax:[92,98,0],gmed:[142,42,0],bf:[84,236,-90],vl:[122,226,-90],rf:[154,190,-90],gc:[96,394,-90],so:[117,482,-90,1],ta:[143,440,-90,1]}
+};
+function addLabels(){
+  const NS='http://www.w3.org/2000/svg';
+  /* pohled z boku: vlastní vrstvy štítků, které se otáčejí s nohou (kyčel l0 ⊃ koleno l1), ale leží nad hýžděmi */
+  const og=$('#v-side > g'),l0=document.createElementNS(NS,'g'),l1=document.createElementNS(NS,'g');
+  l0.id='l0';l1.id='l1';l0.appendChild(l1);og.appendChild(l0);
+  $$('path.m:not(.fib)').forEach(e=>{
+    const k=e.dataset.m,m=M[k],view=e.closest('svg').id.slice(2),cfg=LBL[view]&&LBL[view][k];
+    if(!cfg)return;
+    const [x,y,ang,fl]=cfg,out=fl==='out',one=fl===1||out&&false;
+    const t=document.createElementNS(NS,'text');
+    t.setAttribute('class','ml');
+    t.setAttribute('text-anchor',out?'start':'middle');
+    t.setAttribute('transform',`translate(${x} ${y})${e.closest('[data-mir]')?' scale(-1 1)':''} rotate(${ang})`);
+    t.innerHTML=`<tspan x="0" dy="${one?4:-1}">${m.c}</tspan>`+(one?'':`<tspan class="s" x="0" dy="12.5">${m.s}</tspan>`);
+    let host=e.parentNode;
+    if(view==='side') host=host.id==='r0'?l0:host.id==='r1'?l1:og;
+    host.appendChild(t);
+  });
+}
+
+/* ===== pohledy: vybraný je velký, ostatní dva malé; vybraný sval zůstává ===== */
+function show(v){
+  view=v;
+  $$('.vw').forEach(w=>{const m=w.dataset.v===v;w.classList.toggle('main',m);w.classList.toggle('thumb',!m)});
+  $$('.tabs button').forEach(t=>t.setAttribute('aria-selected',t.dataset.v===v));
+}
+$$('.tabs button').forEach(t=>t.onclick=()=>show(t.dataset.v));
+
+/* ===== input: mouse, touch (click), keyboard ===== */
+document.addEventListener('click',e=>{
+  const w=e.target.closest('.vw.thumb');
+  if(w){show(w.dataset.v);return}   // klepnutí na malý obrázek = přepnout pohled
+  const t=e.target.closest('[data-m]');
+  if(t) pick(cur===t.dataset.m?null:t.dataset.m);       // click again = relax
+  else if(e.target.closest('.view')) pick(null);        // click elsewhere = relax
+});
+document.addEventListener('keydown',e=>{
+  const k=e.target.dataset&&e.target.dataset.m;
+  if(k&&(e.key==='Enter'||e.key===' ')){e.preventDefault();pick(cur===k?null:k)}
+  if(e.key==='Escape')pick(null);
+});
+document.body.classList.add('nt');   // počáteční pózu nastavit bez animace
+show('front'); addLabels(); pick(null);
+void document.body.offsetWidth; document.body.classList.remove('nt');
+</script>
+</body>
+</html>
